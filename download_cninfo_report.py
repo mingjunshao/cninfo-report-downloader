@@ -198,29 +198,116 @@ class CNInfoReportDownloader:
                 pass
             return None
 
+def print_usage():
+    """
+    打印详细的使用说明
+    """
+    usage = """巨潮资讯网报告下载工具使用说明：
+
+用法1：下载年报
+    download_cninfo_report.exe 公司名称 年份 annual
+    示例：download_cninfo_report.exe 贵州茅台 2023 annual
+    示例：download_cninfo_report.exe 600519 2023 annual
+
+用法2：下载季度报告
+    download_cninfo_report.exe 公司名称 年份 quarterly --quarter 季度
+    示例：download_cninfo_report.exe 东吴证券 2023 quarterly --quarter 1  # 第一季度
+    示例：download_cninfo_report.exe 601555 2023 quarterly --quarter 2  # 半年度
+    示例：download_cninfo_report.exe 601555 2023 quarterly --quarter 3  # 第三季度
+
+参数说明：
+    company     - 公司名称或股票代码
+    year        - 报告年份（数字）
+    type        - 报告类型：annual(年报) 或 quarterly(季度报告)
+    --quarter   - 季度，仅季度报告需要，可选值：1, 2, 3, 4
+
+注意事项：
+    1. 搜索公司时，建议使用股票代码以提高搜索准确率
+    2. 部分公司可能没有公开某些年份的报告
+    3. 下载速度取决于网络状况和文件大小
+    4. 巨潮网站可能会有访问限制，建议合理控制请求频率
+"""
+    print(usage)
+
 def main():
-    parser = argparse.ArgumentParser(description='巨潮资讯网报告下载工具')
-    parser.add_argument('company', help='公司名称或股票代码')
-    parser.add_argument('year', type=int, help='报告年份')
-    parser.add_argument('type', choices=['annual', 'quarterly'], help='报告类型: annual(年报) 或 quarterly(季度报告)')
+    # 创建参数解析器
+    parser = argparse.ArgumentParser(
+        description='巨潮资讯网报告下载工具',
+        add_help=False  # 禁用默认的帮助选项
+    )
+    
+    # 添加参数
+    parser.add_argument('company', nargs='?', help='公司名称或股票代码')
+    parser.add_argument('year', nargs='?', type=int, help='报告年份')
+    parser.add_argument('type', nargs='?', choices=['annual', 'quarterly'], help='报告类型: annual(年报) 或 quarterly(季度报告)')
     parser.add_argument('--quarter', choices=['1', '2', '3', '4'], help='季度，仅季度报告需要')
+    parser.add_argument('-h', '--help', action='store_true', help='显示详细使用说明')
     
-    args = parser.parse_args()
-    
-    downloader = CNInfoReportDownloader()
-    
-    # 搜索公司信息
-    logger.info(f"正在搜索公司: {args.company}...")
-    company_info = downloader.search_company(args.company)
-    
-    if not company_info:
-        logger.error(f"未找到公司: {args.company}")
-        return
-    
-    logger.info(f"找到公司: {company_info['name']} (代码: {company_info['code']})")
-    
-    # 下载报告
-    downloader.download_report(company_info, args.year, args.type, args.quarter)
+    try:
+        args = parser.parse_args()
+        
+        # 检查是否请求帮助
+        if args.help or not args.company or not args.year or not args.type:
+            print_usage()
+            return
+        
+        # 检查季度报告是否提供了季度参数
+        if args.type == 'quarterly' and not args.quarter:
+            logger.error("错误：季度报告需要指定季度参数 --quarter")
+            print_usage()
+            return
+        
+        # 验证年份范围
+        import datetime
+        current_year = datetime.datetime.now().year
+        if args.year < 1990 or args.year > current_year:
+            logger.error(f"错误：年份必须在1990到{current_year}之间")
+            print_usage()
+            return
+        
+        # 打印欢迎信息
+        print(f"\n=== 巨潮资讯网报告下载工具 ===")
+        print(f"正在处理：{args.company} {args.year}年 {args.type}报告")
+        if args.quarter:
+            print(f"季度：{args.quarter}")
+        print("=============================\n")
+        
+        downloader = CNInfoReportDownloader()
+        
+        # 搜索公司信息
+        logger.info(f"正在搜索公司: {args.company}...")
+        company_info = downloader.search_company(args.company)
+        
+        if not company_info:
+            logger.error(f"未找到公司: {args.company}")
+            print_usage()
+            return
+        
+        logger.info(f"找到公司: {company_info['name']} (代码: {company_info['code']})")
+        
+        # 下载报告
+        result = downloader.download_report(company_info, args.year, args.type, args.quarter)
+        
+        if not result:
+            logger.warning(f"未能下载 {args.company} {args.year}年的{args.type}报告")
+            print("\n提示：请检查公司名称是否正确，或该公司是否发布了指定年份的报告。")
+            print_usage()
+            return
+        else:
+            print(f"\n✅ 下载完成！文件保存路径：{result}")
+            print("\n提示：如果需要下载其他报告，请重新运行程序并指定不同的参数。")
+            
+    except argparse.ArgumentError as e:
+        logger.error(f"参数错误: {str(e)}")
+        print_usage()
+    except ValueError as e:
+        logger.error(f"参数值错误: {str(e)}")
+        print("提示：年份必须是数字，请检查输入是否正确。")
+        print_usage()
+    except Exception as e:
+        logger.error(f"运行错误: {str(e)}")
+        print("提示：可能的原因包括网络连接问题、巨潮网站访问限制或参数输入错误。")
+        print_usage()
 
 if __name__ == '__main__':
     main()
